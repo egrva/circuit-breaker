@@ -6,7 +6,7 @@
 * [About pattern](#about-pattern)
 * [Resilience4j solutions](#resilience4j-solutions)
 * [Hystrix solutions](#hystrix-solutions)
-* [Eureka naming server, Ribbon, Resilience4j, Feign](#eureka-naming-server)
+* [Eureka naming server, Ribbon, Resilience4j, Feign](#eureka-naming-server-ribbon-resilience4j-feign)
 * [Simple example with Feign](#simple-example-with-feign)
 * [Hystrix and Feign](#hystrix-and-feign)
 * [Used technologies](#used-technologies)

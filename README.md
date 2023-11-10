@@ -1,6 +1,5 @@
 # Circuit breaker
-Здесь рассмотрены различные подходы к использованию паттерна "Circuit breaker", 
-в том числе решения от ["Hystrix"](https://github.com/Netflix/Hystrix/wiki) и 
+This document covers various approaches to using the "Circuit Breaker" pattern, including solutions from ["Hystrix"](https://github.com/Netflix/Hystrix/wiki) and 
 ["Resilience4j"](https://resilience4j.readme.io/docs)
 
 * [About pattern](#about-pattern)
@@ -12,47 +11,21 @@
 * [Used technologies](#used-technologies)
 
 ## About pattern
-*Circuit breaker* - один из паттернов, применяющийся в микросервисной архитектуре. 
-Он позволяет повысить отказоустойчивость системы. Паттерн *Circuit breaker* рассчитан на 
-обработку менее ожидаемых ошибок: обрыв сети, недоступность оборудования. В таких ситуациях
-шанс получить повторную ошибку довольно высок. Например, приложение взаимодействует с неким сервисом, 
-и в рамках реализации запросов и ответов предусмотрен некоторый тайм-аут, по истечении которого, если 
-от сервиса не получен ответ, то операция считается неуспешной. В случае проблем с этим сервисом, во время 
-ожидания ответа и до достижения тайм-аута приложение может потреблять какие-то критически важные ресурсы 
-(память, процессорное время), которые скорее всего нужны другим частям приложения. В такой ситуации, для 
-приложения будет предпочтительнее завершить операцию с ошибкой сразу, не дожидаясь тайм-аута от сервиса и 
-повторять попытку только тогда, когда вероятность успешного завершения будет достаточно высока.
+*Circuit breaker* is one of the patterns used in microservices architecture. It helps enhance the system's fault tolerance and is designed to handle less predictable errors such as network failures or unavailability of services. In such situations, the chances of encountering the same error again are high. For example, when an application interacts with a service, there is a timeout for requests and responses. If no response is received within this timeout, the operation is considered unsuccessful. In case of issues with this service, the application may consume critical resources (memory, processing time) while waiting for a response and before reaching the timeout. In such a situation, it is preferable for the application to terminate the operation with an error immediately, without waiting for the service timeout, and retry the attempt only when the probability of successful completion is sufficiently high.
 
-Паттерн *Circuit breaker* предотвращает попытки приложения выполнить операцию, которая скорее всего 
-завершится неудачно, что позволяет продолжить работу дальше не тратя важные ресурсы, пока известно, что проблема 
-не устранена. Приложение должно быстро принять сбой операции и обработать его.
-Он также позволяет приложению определять, была ли устранена неисправность. Если проблема устранена, 
-приложение может попытаться вызвать операцию снова.
+The Circuit breaker pattern prevents the application from attempting an operation that is likely to fail, allowing it to continue working without consuming essential resources until the problem is resolved. The application should quickly acknowledge the operation failure and handle it. It also allows the application to determine whether the malfunction has been fixed. If the problem is resolved, the application can attempt to call the operation again.
 
-у *Circuit breaker*'а бывает три состояния:
+A Circuit breaker can be in three states:
 ![circuit-breaker](images/circuit-breaker-pattern-01.png)
-1. *Closed*: Запрос приложения перенаправляется на операцию. Прокси-сервер ведет подсчет числа недавних сбоев, 
-и если вызов операции не завершился успешно, прокси-сервер увеличивает это число. Если число недавних сбоев превышает 
-заданный порог в течение заданного периода времени, прокси-сервер переводится в состояние *Open*. На этом этапе 
-прокси-сервер запускает таймер времени ожидания, и по истечении времени этого таймера прокси-сервер переводится в 
-состояние *Half-Open*. Цель применения этого паттерна — дать системе время на исправление ошибки, которая вызвала сбой, 
-прежде чем разрешить приложению попытаться выполнить операцию еще раз.
+1. Closed: Application requests are directed to the operation. The proxy server counts the number of recent failures, and if the operation call is unsuccessful, the proxy server increments this number. If the number of recent failures exceeds a specified threshold within a specified time period, the proxy server transitions to the Open state. At this stage, the proxy server starts a timeout timer, and when this timer expires, the proxy server transitions to the Half-Open state. The purpose of this pattern is to give the system time to fix the error that caused the failure before allowing the application to attempt the operation again.
 
-2. *Open*: запрос от приложения немедленно завершает с ошибкой и исключение возвращается в приложение.
+2. Open: Application requests are immediately terminated with an error, and an exception is returned to the application.
 
-3. *Half-Open*: Ограниченному числу запросов от приложения разрешено проходить через операцию и вызывать ее. 
-Если эти запросы выполняются успешно, предполагается, что ошибка, которая ранее вызывала сбой, устранена, а 
-автоматический выключатель переходит в состояние *Closed* (счетчик сбоев сбрасывается). Если какой-либо запрос 
-завершается со сбоем, автоматическое выключение предполагает, что неисправность все еще присутствует, поэтому он 
-возвращается в состояние *Open* и перезапускает таймер времени ожидания, чтобы дать системе дополнительное время 
-на восстановление после сбоя.
-Состояние *Half-Open* помогает предотвратить быстрый рост запросов к сервису. Т.к. после начала работы сервиса, 
-некоторое время он может быть способен обрабатывать ограниченное число запросов до полного восстановления.
+3. Half-Open: A limited number of requests from the application are allowed to pass through the operation and call it. If these requests are successful, it is assumed that the error that previously caused the failure has been fixed, and the automatic switch transitions to the Closed state (failure count is reset). If any request fails, the automatic switch assumes that the malfunction is still present, so it returns to the Open state and restarts the timeout timer to give the system additional time to recover after the failure.
+The Half-Open state helps prevent a rapid increase in requests to the service. After the service starts working, for some time, it may be able to handle a limited number of requests before full recovery.
 
 ## Resilience4j solutions
-[Resilience4j](https://resilience4j.readme.io/docs) - легковесная, простая в использовании библиотека, 
-с набором инструментов для повышения отказоустойчивости. Она пришла на замену *Netflix Hystrix* (кто не знал, 
-он умер в 2018г). В данной библиотеке представлены следующие фичи:
+[Resilience4j](https://resilience4j.readme.io/docs) - is a lightweight, easy-to-use library with a set of tools for improving fault tolerance. It replaces Netflix Hystrix (which, for those unaware, was discontinued in 2018). This library includes the following features:
 * [Circuit breaker](https://resilience4j.readme.io/docs/circuitbreaker)
 * [Bulkhead](https://resilience4j.readme.io/docs/bulkhead)
 * [Rate Limiter](https://resilience4j.readme.io/docs/ratelimiter)
@@ -61,24 +34,18 @@
 * [Cache](https://resilience4j.readme.io/docs/cache)
 
 ## Hystrix solutions
-[Netflix Hystrix](https://github.com/Netflix/Hystrix/wiki) - - это библиотека, которая помогает вам контролировать 
-взаимодействие между распределенными сервисами, добавляя логику устойчивости к задержкам и отказоустойчивости. Hystrix 
-делает это, изолируя точки доступа между службами, останавливая каскадные отказы между ними и предоставляя варианты 
-восстановления, все из которых улучшают общую отказоустойчивость вашей системы.
-(Вот, что сказано на их официальной страничке)
+[Netflix Hystrix](https://github.com/Netflix/Hystrix/wiki) - s a library that helps control interactions between distributed services, adding resilience to delays and faults. Hystrix achieves this by isolating entry points between services, stopping cascading failures between them, and providing fallback options, all of which improve the overall fault tolerance of your system.
+(As stated on their official page)
 
-Помимо прочего, у *Hystrix* есть прикольная штучка - *Hystrix dashboard*. Она позволяет визуализировать
-метрики, чтобы понять эффективность системы.
+In addition, Hystrix has a cool feature - the Hystrix dashboard. It allows you to visualize metrics to understand system effectiveness.
 ![hystrix-dashboard](images/Hystrix-dashboard.png)
-(Вот как выглядит дашборд)
+(This is what the dashboard looks like)
 
 ## Eureka naming server, Ribbon, Resilience4j, Feign
-Перейдем к примерам. В первом примере рассмотрим работу *Circuit breaker*'a совместно с *Feign*, *Eureka naming service*,
-*Ribbon*. Здесь будет рассматриваться реализация от *Resilience4j*
+Let's move on to examples. In the first example, we will explore the interaction of the Circuit breaker with Feign, Eureka naming service, and Ribbon. This example will focus on the implementation from Resilience4j.
 #### Subway service
 
-В качестве стороннего сервиса возьмем *Subway-service*. Он обрабатывает два запроса:
-на один из них плюется ошибкой, на другой спит (это понадобиться для тестирования time-out'а)
+As a third-party service, let's take the Subway-service. It processes two requests: one returns an error, and the other sleeps (this will be useful for testing timeouts).
 
 ```java
     @GetMapping("/subway/stations/exception")
@@ -91,7 +58,7 @@
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
-            log.error("wtf cant sleep...");
+            log.error("can't sleep...");
         }
         return SubwayStationDto.builder()
                 .subwayStations(Arrays.asList("Кремлевская", "Площадь Тукая", "Суконная слобода", "Аметьево"))
@@ -99,8 +66,8 @@
     }
 ```
 
-Для работы с *Eureka Naming Server* добавим:
-Аннотацию на *main class* :
+To work with Eureka Naming Server, add:
+Annotation on the main class:
 ````java
 @EnableDiscoveryClient
 @SpringBootApplication
@@ -111,7 +78,7 @@ public class SubwayServiceApplication {
 	}
 }
 ````
-Зависимость в *pom.xml*
+Dependency in pom.xml
 ````xml
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
@@ -119,14 +86,14 @@ public class SubwayServiceApplication {
 		</dependency>
 ````
 
-в *application.properties* URL к *Eureka server*
+In application.properties, specify the URL to Eureka server:
 
 ````properties
 eureka.client.service-url.default-zone=http://localhost:8761/eureka
 ````
 
 #### Eureka naming server
-Настроим *Eureka server* (ничего интересного, самый дефолтный сервер)
+Configure the Eureka server (nothing interesting, just the default server).
 
 *Main.class* 
 ````java
@@ -149,11 +116,11 @@ eureka.client.fetch-registry=false
 ````
 
 #### Circuit breaker service
-Ммммм...)) то, ради чего мы здесь собрались. 
+Hmm...)) This is what we gathered here for.
 
-Будем разбирать, как настраивать *Feign Client*. 
+Let's dive into configuring the Feign Client.
 
-Добавляем следующие аннотации в *Main.class*
+Add the following annotations to Main.class:
 ````java
 @SpringBootApplication
 @EnableFeignClients
@@ -167,12 +134,11 @@ public class CircuitBreakerApplication {
 }
 ````
 
-*@EnableFeignClients* - для работы с *Feign clients*
-*@EnableEurekaClient* - для работы с *Eureka server*
-*@RibbonClient* - для работы с *Ribbon*
+*@EnableFeignClients* - for working with Feign clients
+*@EnableEurekaClient* - for working with Eureka server
+*@RibbonClient* - for working with Ribbon
 
-Для работы с *Circuit Breaker*'ом нам понадобиться добавить класс конфигурации
-в аннотацию *@FeignClient* 
+To work with Circuit Breaker, we need to add a configuration class to the @FeignClient annotation.
 
 ````java
 @FeignClient(value = SubwayFeignService.SERVICE_NAME,
@@ -192,10 +158,9 @@ public interface SubwayFeignService {
 }
 ````
 
-в классе конфигурации объявляем *Feign.Builder* и в *FeignDecorator* передаем наши *Circuit Breaker*,
- *FallBack*.
- 
-*FallBack* - позволяет определить поведение при возникновении ошибки.
+In the configuration class, declare Feign.Builder, and pass our Circuit Breaker and Fallback to FeignDecorator.
+
+Fallback allows defining behavior when an error occurs.
 
 ````java
 @RequiredArgsConstructor
@@ -219,7 +184,7 @@ public class SubwayFeignServiceConfiguration {
 
 ````
 
-Также необходимо сконфигурировать *CircuitBreaker*. Я вынесла все настройки в файл *application.properties*
+Also, it is necessary to configure the Circuit Breaker. I have placed all the settings in the application.properties file.
 ````properties
 spring.application.name=subway-info-service
 server.port=8081
@@ -246,16 +211,13 @@ feign.client.config.default.readTimeout=1000
 
 ## Simple example with Feign
 
-В этом примере не будет использоваться *Eureka Naming Server* и *Ribbon*
-Здесь рассмотрен пример, как в одном часть *FeignClient*'ов настроить с использованием
-*CircuitBreaker*, а часть без него.
+In this example, Eureka Naming Server and Ribbon will not be used. This example demonstrates how to configure some FeignClients using CircuitBreaker while others do not.
 
 (circuit-breaker-without-eureka-server)
 
 ## Hystrix and Feign
 
-В этом примере показано как воспользоваться *Circuit Breaker*'ом от  *Netflix Hystrix*
-(Не забываем, что он DEPRECATED!!)
+This example shows how to use the Circuit Breaker from Netflix Hystrix (Remember, it's deprecated!).
 
 (hystrix-circuit-breaker)
 
